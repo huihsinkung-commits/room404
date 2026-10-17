@@ -1,4 +1,4 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>404號房的住戶 V45 · 完整整合版</title><style>
+<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>404號房的住戶 V48 · 腳步聲加強版</title><style>
 *{box-sizing:border-box}body{margin:0;background:#101518;color:#e9e5d9;font-family:system-ui,'Noto Sans TC',sans-serif;overflow:hidden}button{font:inherit;cursor:pointer}#game{position:fixed;inset:0}#hud{position:fixed;inset:0;pointer-events:none}#cross{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#f0e4c4;font-size:24px;text-shadow:0 0 9px #000}#hint{position:absolute;top:58%;width:100%;text-align:center;font-size:14px;color:#f3d9a0;text-shadow:0 2px 4px #000}#top{position:absolute;top:14px;left:16px;font-size:13px;letter-spacing:.04em;color:#e7dcc7;max-width:58%;text-shadow:0 2px 6px #000;background:#10181dbb;border-radius:8px;padding:7px 9px}#goal{display:inline-block;margin-top:5px;color:#f1d49e;line-height:1.45}#toolbar{position:absolute;right:15px;top:14px;display:flex;gap:8px;pointer-events:auto}.btn{background:#192329e8;color:#eee1cc;border:1px solid #8c7d69;border-radius:8px;padding:9px 13px}.btn:hover{background:#344149}#toast{position:absolute;bottom:17%;left:50%;transform:translateX(-50%);background:#12191fe8;padding:10px 17px;border-radius:8px;max-width:85%;text-align:center;opacity:0;transition:opacity .3s}#modal{position:fixed;inset:0;background:#080b0dd9;display:flex;align-items:center;justify-content:center;padding:18px;z-index:10}#panel{width:min(650px,100%);max-height:90vh;overflow:auto;background:#1b2529;border:1px solid #796b59;border-radius:12px;padding:24px;box-shadow:0 20px 70px #0009}h1{font-size:32px;letter-spacing:.1em;margin:0 0 12px}h2{font-size:21px;margin:0 0 16px}p{line-height:1.85;color:#cfc9bd}.sub{color:#c6a77d;font-size:13px;letter-spacing:.15em}.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}.clue{border:1px solid #475459;border-radius:8px;padding:11px;margin:9px 0;background:#12191d}#mobile{position:absolute;inset:0;pointer-events:none;display:none}#stick{position:absolute;bottom:24px;left:24px;width:112px;height:112px;border-radius:50%;background:#d9d3c01c;border:1px solid #ddd8c080;pointer-events:auto;touch-action:none}#nub{position:absolute;width:44px;height:44px;border-radius:50%;background:#ddd8c070;left:33px;top:33px}#use{position:absolute;bottom:50px;right:25px;width:76px;height:76px;border-radius:50%;background:#c4a47766;border:1px solid #e2ca9b;color:white;pointer-events:auto;touch-action:manipulation}#look{position:absolute;right:0;top:20%;width:54%;height:58%;pointer-events:auto;touch-action:none}#flash{position:absolute;bottom:138px;right:35px;pointer-events:auto}#footer{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);font-size:11px;color:#c2b49a;text-align:center;white-space:nowrap}@media(pointer:coarse){#top{max-width:52%;font-size:10px}#mobile{display:block}#footer{display:none}#toolbar .btn{padding:8px;font-size:12px}#top{font-size:11px;max-width:40%}}@media(max-width:550px){h1{font-size:25px}#panel{padding:17px}}
 
 /* V10 physical inspection overlays */
@@ -328,42 +328,122 @@ function rigWalkCharacter(model){
  }
  return {hip,chest,head,leftArm,rightArm,leftLeg,rightLeg,leftFoot,rightFoot};
 }
-// V43: optional, low-overhead procedural atmosphere. Starts only on user gesture.
+// V46: mobile-audible procedural soundscape, generated locally with Web Audio.
+// No audio files or external audio downloads required.
 let ambienceContext=null,ambienceMaster=null,ambienceTimer=0;
+let soundBed=null,noiseBuffer=null,lastStepAt=0,lastMotionAt=0,lastUiAt=0,footParity=0;
 function audioEnabled(){return state?.settings?.sound!==false}
-function initAmbience(){
- if(!audioEnabled()||ambienceContext)return;
- try{
-  ambienceContext=new (window.AudioContext||window.webkitAudioContext)();
-  ambienceMaster=ambienceContext.createGain();ambienceMaster.gain.value=.025;
-  ambienceMaster.connect(ambienceContext.destination);
-  const oscillator=ambienceContext.createOscillator();oscillator.type='sine';oscillator.frequency.value=54;
-  const low=ambienceContext.createGain();low.gain.value=.13;
-  oscillator.connect(low).connect(ambienceMaster);oscillator.start();
-  ambienceTimer=window.setInterval(()=>{
-   if(!audioEnabled()||document.hidden||state?.progress?.endingLocked)return;
-   if(Math.random()<.42)ambientKnock();
-  },12500);
- }catch(e){console.warn('Audio unavailable',e)}
+function audioReady(){return audioEnabled()&&ambienceContext&&ambienceContext.state==='running'&&!document.hidden&&!state?.progress?.endingLocked}
+function tone(freq=300,duration=.12,volume=.12,type='sine',delay=0,slide=1){
+ if(!audioReady())return;
+ const c=ambienceContext,t=c.currentTime+delay,o=c.createOscillator(),g=c.createGain();
+ o.type=type;o.frequency.setValueAtTime(Math.max(25,freq),t);
+ if(slide!==1)o.frequency.exponentialRampToValueAtTime(Math.max(25,freq*slide),t+duration);
+ g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(Math.max(.0002,volume),t+.009);
+ g.gain.exponentialRampToValueAtTime(.0001,t+duration);
+ o.connect(g).connect(ambienceMaster);o.start(t);o.stop(t+duration+.015);
 }
+function makeNoise(){
+ const c=ambienceContext,b=c.createBuffer(1,c.sampleRate*2,c.sampleRate),v=b.getChannelData(0);
+ let last=0;for(let i=0;i<v.length;i++){last=(last+(.17*(Math.random()*2-1)))/1.17;v[i]=last*.85}
+ return b;
+}
+function noiseBurst(duration=.12,volume=.14,filterFreq=900,delay=0){
+ if(!audioReady())return;
+ const c=ambienceContext,t=c.currentTime+delay,s=c.createBufferSource(),f=c.createBiquadFilter(),g=c.createGain();
+ s.buffer=noiseBuffer;f.type='bandpass';f.frequency.value=filterFreq;f.Q.value=.75;
+ g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(volume,t+.012);
+ g.gain.exponentialRampToValueAtTime(.0001,t+duration);
+ s.connect(f).connect(g).connect(ambienceMaster);s.start(t);s.stop(t+duration+.01);
+}
+// V48: signature three-knock motif, boosted in the phone-speaker range.
 function ambientKnock(){
- if(!ambienceContext||!audioEnabled()||ambienceContext.state!=='running')return;
- const now=ambienceContext.currentTime;
- for(let i=0;i<3;i++){
-  const osc=ambienceContext.createOscillator(),gain=ambienceContext.createGain();
-  osc.type='triangle';osc.frequency.setValueAtTime(110-i*9,now+i*.25);
-  osc.frequency.exponentialRampToValueAtTime(42,now+i*.25+.12);
-  gain.gain.setValueAtTime(.0001,now+i*.25);
-  gain.gain.exponentialRampToValueAtTime(.25,now+i*.25+.015);
-  gain.gain.exponentialRampToValueAtTime(.0001,now+i*.25+.16);
-  osc.connect(gain).connect(ambienceMaster);osc.start(now+i*.25);osc.stop(now+i*.25+.18);
+ if(!audioReady())return;
+ const c=ambienceContext;
+ // Temporarily duck background ambience so the knocks stand out.
+ if(soundBed){
+  const now=c.currentTime;
+  soundBed.humGain.gain.cancelScheduledValues(now);
+  soundBed.airGain.gain.cancelScheduledValues(now);
+  soundBed.humGain.gain.setTargetAtTime(.004,now,.035);
+  soundBed.airGain.gain.setTargetAtTime(.009,now,.035);
+  soundBed.humGain.gain.setTargetAtTime(.014,now+1.35,.28);
+  soundBed.airGain.gain.setTargetAtTime(.045,now+1.35,.28);
  }
+ for(let i=0;i<3;i++){
+  const d=i*.43;
+  // Solid mid-frequency wood impact, audible on phone speakers.
+  tone(270-i*14,.20,.53,'triangle',d,.42);
+  tone(510-i*21,.095,.30,'sine',d,.53);
+  noiseBurst(.11,.45,740,d);
+  noiseBurst(.055,.25,1650,d+.012);
+  // Short resonant tail gives a sense of a door beyond the corridor.
+  tone(205-i*9,.30,.15,'sine',d+.045,.78);
+ }
+}
+function soundEffect(kind){
+ if(!audioReady())return;
+ if(kind==='step'){noiseBurst(.11,.36,850);noiseBurst(.075,.25,1850,.018);tone(175,.085,.16,'triangle',0,.72)}
+ if(kind==='ui'){tone(620,.045,.035,'sine',0,.86)}
+ if(kind==='paper'){noiseBurst(.21,.12,1700);noiseBurst(.14,.075,1200,.13)}
+ if(kind==='metal'){tone(470,.18,.13,'triangle',0,.42);tone(760,.1,.055,'sine',.045,.8)}
+ if(kind==='door'){noiseBurst(.45,.16,320);tone(145,.48,.16,'sawtooth',0,.7)}
+ if(kind==='clue'){tone(430,.14,.12,'sine');tone(645,.24,.11,'sine',.13)}
+ if(kind==='scare'){tone(92,.7,.27,'sawtooth',0,.46);noiseBurst(.5,.18,510)}
+ if(kind==='electric'){noiseBurst(.3,.15,2900);tone(115,.18,.07,'sawtooth')}
+}
+function initAmbience(){
+ if(!audioEnabled())return;
+ try{
+  if(!ambienceContext){
+   ambienceContext=new (window.AudioContext||window.webkitAudioContext)();
+   ambienceMaster=ambienceContext.createGain();ambienceMaster.gain.value=.72;
+   const limiter=ambienceContext.createDynamicsCompressor();
+   limiter.threshold.value=-12;limiter.knee.value=8;limiter.ratio.value=8;
+   limiter.attack.value=.003;limiter.release.value=.15;
+   ambienceMaster.connect(limiter).connect(ambienceContext.destination);
+   noiseBuffer=makeNoise();
+   const hum=ambienceContext.createOscillator(),humGain=ambienceContext.createGain();
+   hum.type='sawtooth';hum.frequency.value=110;humGain.gain.value=.014;
+   hum.connect(humGain).connect(ambienceMaster);hum.start();
+   const air=ambienceContext.createBufferSource(),airFilter=ambienceContext.createBiquadFilter(),airGain=ambienceContext.createGain();
+   air.buffer=noiseBuffer;air.loop=true;airFilter.type='lowpass';airFilter.frequency.value=530;
+   airGain.gain.value=.045;air.connect(airFilter).connect(airGain).connect(ambienceMaster);air.start();
+   soundBed={hum,humGain,air,airFilter,airGain};
+   ambienceTimer=window.setInterval(()=>{
+    if(!audioReady())return;
+    if(Math.random()<.52)ambientKnock();
+    else if(Math.random()<.48)soundEffect('electric');
+   },8500);
+  }
+  ambienceContext.resume().then(()=>{
+   if(audioReady()){
+    soundEffect('electric');
+    // The first knocks are deliberately audible soon after starting.
+    if(!lastMotionAt){lastMotionAt=performance.now();setTimeout(()=>ambientKnock(),1600)}
+   }
+  }).catch(()=>{});
+ }catch(e){console.warn('Audio unavailable',e)}
 }
 function toggleSound(){
  state.settings??={sound:true};state.settings.sound=!audioEnabled();save();
- if(state.settings.sound){initAmbience();ambienceContext?.resume()}else if(ambienceContext)ambienceContext.suspend();
- toast(state.settings.sound?'環境音效已開啟':'環境音效已關閉');
+ if(state.settings.sound)initAmbience();else if(ambienceContext)ambienceContext.suspend();
+ toast(state.settings.sound?'環境音效已開啟（請調高媒體音量）':'環境音效已關閉');
 }
+// Real movement drives footsteps: keyboard and touch joystick both supported.
+function audioFootstep(now){
+ if(!audioReady()||modal||now-lastStepAt<365)return;
+ lastStepAt=now;footParity^=1;
+ // Two-layer shoe impact with alternating left/right timbre; mobile-speaker friendly.
+ noiseBurst(.105,footParity?.40:.35,footParity?1050:820);
+ noiseBurst(.065,.24,footParity?2050:1600,.023);
+ tone(footParity?205:180,.075,.12,'triangle',0,.78);
+}
+// Light-touch UI sounds and context-sensitive inspection cues.
+document.addEventListener('click',e=>{
+ if(!audioReady()||performance.now()-lastUiAt<75)return;
+ if(e.target.closest('button')){lastUiAt=performance.now();soundEffect('ui')}
+},true);
 // Ambient details are decorative and deliberately excluded from interaction raycasting.
 function environmentalDetails(){
  const wallMaterial=new THREE.MeshStandardMaterial({color:0x5e5448,roughness:1});
@@ -495,7 +575,7 @@ carvedMark.visible=!!state.solved;markCross.visible=!!state.solved;markGlow.inte
 function open(html){modal=true;document.exitPointerLock?.();modalEl.style.display='flex';panelEl.innerHTML=html}function close(){
  if(state.progress.endingLocked){endingShow(state.finale.ending);return}
  for(const npc of interviewNPCs)npc.talking=false;modal=false;modalEl.style.display='none'}function btn(label,fn){const b=document.createElement('button');b.className='btn';b.textContent=label;b.onclick=fn;return b}function show(title,body,actions){open(`<div class="sub">安和公寓 · 調查紀錄</div><h2>${title}</h2><p>${body}</p><div class="actions" id="actions"></div>`);const a=document.querySelector('#actions');for(const [t,f] of actions)a.append(btn(t,f));if(!actions.some(([t])=>t==='返回探索')&&!document.body.classList.contains('game-ended'))a.append(btn('返回探索',close))}function toast(t){const el=document.querySelector('#toast');el.textContent=t;el.style.opacity=1;clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.style.opacity=0,3100)}
-function intro(){open(`<div class="sub">風格化3D心理恐怖 · 八章進度與結局保護版 V40</div><h1>404號房的住戶</h1><p>凌晨 04:04。<br>你聽見走廊深處傳來三聲敲擊。<br>管理員說，這棟公寓從來沒有404號房。</p><p>你現在站在安和公寓四樓。線索必須實際出現在場景中：請靠近公告上的紙張、修補的門洞與牆上的逃生圖，對準物件後調查。</p><div class="actions" id="actions"></div>`);const a=document.querySelector('#actions');a.append(btn('開始探索',()=>{initAmbience();close();refreshGoal();toast(nextGoal())}));a.append(btn('環境音效：開／關',toggleSound));a.append(btn('重設遊戲進度',()=>{localStorage.removeItem('room404-save-v13');location.reload()}))}
+function intro(){open(`<div class="sub">風格化3D心理恐怖 · V48 敲擊聲加強版</div><h1>404號房的住戶</h1><p>凌晨 04:04。<br>你聽見走廊深處傳來三聲敲擊。<br>管理員說，這棟公寓從來沒有404號房。</p><p>你現在站在安和公寓四樓。線索必須實際出現在場景中：請靠近公告上的紙張、修補的門洞與牆上的逃生圖，對準物件後調查。</p><div class="actions" id="actions"></div>`);const a=document.querySelector('#actions');a.append(btn('開始探索',()=>{initAmbience();close();refreshGoal();toast(nextGoal())}));a.append(btn('環境音效：開／關',toggleSound));a.append(btn('重設遊戲進度',()=>{localStorage.removeItem('room404-save-v13');location.reload()}))}
 function nextGoal(){
  if(state.finale?.ending)return '第八章完成：可在筆記中回顧真相與結局';if(state.deep?.truth)return '第八章：整理最後的證據，決定要留下什麼';if(state.deep?.decoded)return '第七章：面對管理員，核對證詞與物證';if(state.after?.confirmed)return '第六章：檢查封存檔案，還原被塗掉的房號與時間';if(state.chapter4?.solved)return state.finale?.seen?.length<3?'第五章：調查維修艙門後的原始證據':'第五章：返回四樓走廊，親自詢問陳小姐、阿哲與林伯，再重建時間線';if(state.chapter3?.solved)return state.breach?.opened?'第四章：進入已鑿開的維修通道':'第四章：找到合適工具，檢查封牆的固定點並拆開入口';if(state.photoSolved)return '第三章：調查402房內的監視器、值班紀錄與鑰匙保管箱';
  if(state.memory){if(state.photoSolved)return '第二章完成：你在照片中認出了童年的自己';if(state.photos?.length===3&&state.diaryRead)return '開啟筆記：依照片背面的記號重組順序，再核對日期與人物';return '第二章：調查402房間裡不尋常的家具與舊物';}
@@ -703,7 +783,7 @@ function flipBreaker(which){const b=state.breaker;const expected=(!b.hall&&b.bac
 function deduce(){show('推理：404號房為何消失？','請區分「過去曾有404」與「現在的入口在哪裡」。住戶通知、消防逃生圖和修補牆面各自能證明什麼？',[['404從未存在，舊資料只是筆誤',()=>show('證據衝突','兩份不同用途的舊紀錄都出現404，不宜同時視為筆誤。',[['重新推理',deduce]])],['404原本存在，入口可能被封閉',()=>{state.solved=true;carvedMark.visible=true;markCross.visible=true;markGlow.intensity=2;save();refreshGoal();show('推論成立','舊文件證明房號曾存在，修補痕跡則指出可能的封閉位置。這仍是需要進一步驗證的推論。返回403與405之間的牆面調查刻痕。',[])}],['牆面修補證明404發生過靈異事件',()=>show('推論過度','修補牆面是物理證據，無法單獨證明超自然事件。',[['重新推理',deduce]])]])}
 
 // V19: Chapter Four and Finale. Everything is reachable through visible world objects.
-function breachSound(){try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;const ctx=new AC(),osc=ctx.createOscillator(),gain=ctx.createGain();osc.type='triangle';osc.frequency.setValueAtTime(135,ctx.currentTime);osc.frequency.exponentialRampToValueAtTime(44,ctx.currentTime+.16);gain.gain.setValueAtTime(.11,ctx.currentTime);gain.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.21);osc.connect(gain).connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+.22);osc.onended=()=>ctx.close()}catch(e){}}
+function breachSound(){soundEffect('scare');try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;const ctx=new AC(),osc=ctx.createOscillator(),gain=ctx.createGain();osc.type='triangle';osc.frequency.setValueAtTime(135,ctx.currentTime);osc.frequency.exponentialRampToValueAtTime(44,ctx.currentTime+.16);gain.gain.setValueAtTime(.11,ctx.currentTime);gain.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.21);osc.connect(gain).connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+.22);osc.onended=()=>ctx.close()}catch(e){}}
 function inspectBreach(){
  if(!state.chapter3.solved){show('被封住的404','你還無法確認這面牆後究竟是什麼。先完成時間線調查。',[]);return}
  if(state.breach.opened){show('已經鑿開的入口','石膏牆後露出狹窄的維修通道。你能看見鏽蝕管線與地上的碎石。',[['進入牆後通道',enterPassage]]);return}
@@ -979,7 +1059,7 @@ function endingChoice(){document.body.classList.add('game-ended');if(!state.deep
  ['循著第四聲敲擊，獨自進入更深的井道',()=>attemptEnding('fourth')],
  ...(state.finale.ending?[['返回已達成的結局',()=>endingShow(state.finale.ending)]]:[])
  ])}
-function endingShow(kind){
+function endingShow(kind){if(ambienceContext&&ambienceContext.state==='running')ambienceContext.suspend();
  if(!state.deep.truth||!state.deep.finalReviewed){chapter8Journal();return}
  const endings={
  truth:['結局一｜讓真相見光','你將影像缺口、鑰匙紀錄與安全報告交給調查機關，也向住戶公開未經證實與已確認的部分。公寓的改建與隱匿行為重新接受調查。許若晴的下落仍是未知，但她留下的證據終於被認真對待。'],
@@ -1021,7 +1101,7 @@ function collectDeskPhoto(){
  syncHidden();save();refreshGoal();
  show('找到照片碎片','<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><img alt="泛黃的照片碎片" src="'+photoSlices[photoPieceById.photoA]+'" style="height:180px;max-width:45%;object-fit:contain;border:5px solid #b7a181"><div>你從書桌抽屜中拿出一張泛黃的照片碎片。<br>背面記號：③（孩子的袖口）。<br>已取得 '+state.photos.length+'/3 張碎片。</div></div>',[]);
 }
-function interact(){if(state.progress.endingLocked||modal||!active)return;const o=active;
+function interact(){if(state.progress.endingLocked||modal||!active)return;const o=active;const nm=(o.name||'')+' '+(o.id||'');soundEffect(/門|door|hatch|wardrobe/i.test(nm)?'door':/電|監視|switch|cctv|pipe/i.test(nm)?'electric':/鑰匙|metal|locker|handle/i.test(nm)?'metal':/紙|日記|文件|photo|diary|notice|folder|report/i.test(nm)?'paper':'clue');
 reach();if(o.id==='npcChen'||o.id==='npcZhe'||o.id==='npcLin'){if(state.finale.seen.length===3)witnessPage(({npcChen:0,npcZhe:1,npcLin:2})[o.id],0);else show('住戶','現在還不是詢問的時候。',[]);return}if(Object.prototype.hasOwnProperty.call(finalTargets,o.id)){lateInteract(o.id);return}if(o.id==='pryBar'){if(!state.chapter3.solved){show('廢棄工具架','一根生鏽的撬棍放在架子上。現在還沒有理由破壞公寓牆面。',[]);return}state.breach.tool=true;save();syncBreachScene();refreshGoal();show('取得撬棍','你拿起沉重的鐵製撬棍。握柄上沾著乾掉的石灰粉，似乎曾經用來拆除牆板。',[['返回封牆調查',close]]);return}if(o.id==='wall'&&state.chapter3?.solved){inspectBreach();return}if(['cctvScreen','cctvGlass','dutyLedger','keyLocker','keyPlate'].includes(o.id)){thirdInteract(o.id);return}if(o.id==='door402'){if(!state.memory){show('402號房','房門緊鎖。也許先調查消失的404號房，才能知道該向誰詢問。',[]);return}pos.set(0,1.65,-15.6);yaw=0;pitch=0;toast('第二章｜照片裡的人：搜尋房間中的三張照片碎片');refreshGoal();return}
 if(o.id==='roomExit'){pos.set(-2.7,1.65,-4.6);yaw=-Math.PI/2;pitch=0;toast('返回四樓走廊');return}
 if(['deskDrawer','drawerFront','drawerHandle','wardrobeDoor','looseBoard'].includes(o.id)){
@@ -1042,7 +1122,7 @@ lookZone.addEventListener('pointerdown',e=>{if(modal)return;lookZone.setPointerC
 lookZone.addEventListener('pointermove',e=>{if(!lookPt||lookPt.id!==e.pointerId||modal)return;lookPendingX+=Math.max(-55,Math.min(55,e.clientX-lookPt.x));lookPendingY+=Math.max(-55,Math.min(55,e.clientY-lookPt.y));lookPt.x=e.clientX;lookPt.y=e.clientY});
 function stopLook(){lookPt=null;lookPendingX=lookPendingY=0}lookZone.addEventListener('pointerup',stopLook);lookZone.addEventListener('pointercancel',stopLook);
 
-let last=performance.now();function tick(t){if(document.hidden){last=t;requestAnimationFrame(tick);return}requestAnimationFrame(tick);const dt=Math.max(0,Math.min(.05,(t-last)/1000));last=t;if(!modal&&!state.progress.endingLocked){const maxStep=dt*1900;const sx=Math.max(-maxStep,Math.min(maxStep,lookPendingX)),sy=Math.max(-maxStep,Math.min(maxStep,lookPendingY));lookPendingX-=sx;lookPendingY-=sy;look(sx*.96,sy*.96)}else{lookPendingX=lookPendingY=0}camera.rotation.order='YXZ';camera.rotation.y=yaw;camera.rotation.x=pitch;if(!modal&&!state.progress.endingLocked){let mx=(keys.has('KeyD')?1:0)-(keys.has('KeyA')?1:0)+joystick.x;let mz=(keys.has('KeyS')?1:0)-(keys.has('KeyW')?1:0)+joystick.y;const l=Math.hypot(mx,mz);if(l>.03){mx/=Math.max(1,l);mz/=Math.max(1,l);const speed=3.0*dt;pos.x+=Math.cos(yaw)*mx*speed+Math.sin(yaw)*mz*speed;pos.z+=-Math.sin(yaw)*mx*speed+Math.cos(yaw)*mz*speed;pos.x=Math.max(-4.04,Math.min(4.04,pos.x));pos.z=pos.z < -23 ? Math.max(-33.08,Math.min(-23.95,pos.z)) : pos.z < -12 ? Math.max(-21.15,Math.min(-14.85,pos.z)) : Math.max(-9.05,Math.min(3.55,pos.z));pos.x=pos.z < -23 ? Math.max(-2.38,Math.min(2.38,pos.x)) : pos.z < -12 ? Math.max(-3.15,Math.min(3.15,pos.x)) : pos.x}camera.position.copy(pos)}torch.position.copy(camera.position);torch.target.position.copy(camera.position).add(new THREE.Vector3(-Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch)));torch.target.updateMatrixWorld();bulb.intensity=t<flickerUntil?(Math.sin(t*.095)>0?0:15):15;apparition.visible=t<ghostUntil;for(const npc of interviewNPCs){
+let last=performance.now();function tick(t){if(document.hidden){last=t;requestAnimationFrame(tick);return}requestAnimationFrame(tick);const dt=Math.max(0,Math.min(.05,(t-last)/1000));last=t;if(!modal&&!state.progress.endingLocked){const maxStep=dt*1900;const sx=Math.max(-maxStep,Math.min(maxStep,lookPendingX)),sy=Math.max(-maxStep,Math.min(maxStep,lookPendingY));lookPendingX-=sx;lookPendingY-=sy;look(sx*.96,sy*.96)}else{lookPendingX=lookPendingY=0}camera.rotation.order='YXZ';camera.rotation.y=yaw;camera.rotation.x=pitch;if(!modal&&!state.progress.endingLocked){let mx=(keys.has('KeyD')?1:0)-(keys.has('KeyA')?1:0)+joystick.x;let mz=(keys.has('KeyS')?1:0)-(keys.has('KeyW')?1:0)+joystick.y;const l=Math.hypot(mx,mz);if(l>.03){mx/=Math.max(1,l);mz/=Math.max(1,l);const speed=3.0*dt;audioFootstep(t);pos.x+=Math.cos(yaw)*mx*speed+Math.sin(yaw)*mz*speed;pos.z+=-Math.sin(yaw)*mx*speed+Math.cos(yaw)*mz*speed;pos.x=Math.max(-4.04,Math.min(4.04,pos.x));pos.z=pos.z < -23 ? Math.max(-33.08,Math.min(-23.95,pos.z)) : pos.z < -12 ? Math.max(-21.15,Math.min(-14.85,pos.z)) : Math.max(-9.05,Math.min(3.55,pos.z));pos.x=pos.z < -23 ? Math.max(-2.38,Math.min(2.38,pos.x)) : pos.z < -12 ? Math.max(-3.15,Math.min(3.15,pos.x)) : pos.x}camera.position.copy(pos)}torch.position.copy(camera.position);torch.target.position.copy(camera.position).add(new THREE.Vector3(-Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch)));torch.target.updateMatrixWorld();bulb.intensity=t<flickerUntil?(Math.sin(t*.095)>0?0:15):15;apparition.visible=t<ghostUntil;for(const npc of interviewNPCs){
  const ph=t*.001+npc.phase;
  const distance=Math.hypot(pos.x-npc.group.position.x,pos.z-npc.group.position.z);
  const near=distance<3.9 && npc.group.visible;
@@ -1139,7 +1219,7 @@ const hits=raycaster.intersectObjects(Object.entries(targets).filter(([id,m])=>m
 if(hits.length){const mesh=hits[0].object;const match=items.find(item=>targets[item.id]===mesh);if(match&&!(match.id==='mark'&&!state.solved))active=(state.solved&&!state.memory&&match.id==='wall')?items.find(item=>item.id==='mark'):match}
 hintEl.textContent=active&&!modal?`${matchMedia('(pointer:coarse)').matches?'點擊互動':'E'} · 檢查 ${active.name}`:'';renderer.render(scene,camera)}renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,matchMedia('(pointer:coarse)').matches?1.4:1.75));requestAnimationFrame(tick);refreshGoal();addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,matchMedia('(pointer:coarse)').matches?1.4:1.75))});// V45: deterministic diagnostics for testers; no automatic chapter completion.
 window.room404Diagnostics=()=>({
- version:45,chapter:activeChapter(),ending:state.finale.ending,
+ version:46,chapter:activeChapter(),ending:state.finale.ending,
  locked:state.progress.endingLocked,completed:[...state.progress.completed],
  witnesses:state.after.interviews.length,questions:(state.inquiry?.followups||[]).length,
  renderSize:[renderer.domElement.width,renderer.domElement.height],
